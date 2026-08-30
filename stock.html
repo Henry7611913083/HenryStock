@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSC 트레이딩뷰 가상 주식시장</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #131722; margin: 0; padding: 20px; color: #d1d4dc; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 25px; }
+        header h1 { margin: 0; color: #ffffff; font-size: 28px; }
+        header p { color: #848e9c; margin: 5px 0 0 0; }
+        
+        .status-bar { background-color: #1e222d; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; border: 1px solid #2a2e39; }
+        .status-badge { padding: 5px 12px; border-radius: 4px; font-size: 13px; }
+        .status-connected { background-color: #162a25; color: #26a69a; }
+        .status-disconnected { background-color: #351e23; color: #ef5350; }
+        
+        #clock-info { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #26a69a; }
+
+        /* 제어판 스타일 */
+        .control-panel { background-color: #1e222d; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; border: 1px solid #2a2e39; }
+        .control-panel label { font-weight: 600; color: #848e9c; }
+        .control-panel input[type="range"] { flex: 1; max-width: 300px; }
+        
+        /* 차트 컨테이너 */
+        .chart-container { background-color: #1e222d; padding: 10px; border-radius: 8px; border: 1px solid #2a2e39; position: relative; }
+        #chart { width: 100%; height: 500px; }
+
+        .btn-pause {
+            background-color: #2962ff;
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-pause.paused { background-color: #ef5350; }
+        .btn-pause:hover { opacity: 0.9; }
+        
+        .range-selector {
+            display: flex;
+            gap: 5px;
+            background-color: #1e222d;
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+            margin-bottom: 15px;
+            width: fit-content;
+        }
+        .range-btn {
+            background: transparent;
+            border: none;
+            color: #848e9c;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .range-btn:hover {
+            color: #ffffff;
+            background-color: #2a2e39;
+        }
+        .range-btn.active {
+            color: #ffffff;
+            background-color: #2962ff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📈 HSC 트레이딩뷰 실시간 대시보드</h1>
+        <p>Lightweight Charts v5 규격 반영 및 실시간 시계 동기화 시스템</p>
+    </header>
+
+    <div class="status-bar">
+        <div>상태: <span id="status" class="status-badge status-disconnected">연결 대기 중</span></div>
+        <div id="clock-info">현재 시간: --:--:--</div>
+    </div>
+
+    <div class="range-selector">
+        <button class="range-btn" data-days="7">1W</button>
+        <button class="range-btn" data-days="14">2W</button>
+        <button class="range-btn active" data-days="28">4W</button> 
+        <button class="range-btn" data-days="30">1M</button>
+        <button class="range-btn" data-days="90">3M</button>
+        <button class="range-btn" data-days="180">6M</button>
+        <button class="range-btn" data-days="365">1Y</button>
+    </div>
+
+    <div class="control-panel">
+        <label for="speedRange">🔄 전송 간격 설정:</label>
+        <input type="range" id="speedRange" min="50" max="2500" step="25" value="500">
+        <span id="speedValue">1000 ms (1초)</span>
+        
+        <button id="pauseBtn" class="btn-pause">⏸️ 일시정지</button>
+    </div>
+
+    <div class="chart-container">
+        <div id="chart"></div>
+    </div>
+</div>
+
+<script>
+    const statusEl = document.getElementById('status');
+    const clockInfoEl = document.getElementById('clock-info');
+    const speedRange = document.getElementById('speedRange');
+    const speedValue = document.getElementById('speedValue');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    let currentRangeDays = 28; 
+    const TICKS_PER_DAY = 2; 
+    const timeHistory = [];
+
+    // 1. 상단 디지털시계 기능 (1초 주기 자동 갱신)
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('ko-KR', { hour12: false });
+        clockInfoEl.textContent = `현재 시간: ${timeString}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 2. TradingView 차트 설정 정의
+    const chartProperties = {
+        width: document.getElementById('chart').clientWidth,
+        height: 500,
+        layout: {
+            background: { type: 'solid', color: '#131722' },
+            textColor: '#d1d4dc',
+        },
+        grid: {
+            vertLines: { color: '#2a2e39' },
+            horzLines: { color: '#2a2e39' },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+        },
+        rightPriceScale: {
+            borderColor: '#2a2e39',
+            scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+            borderColor: '#2a2e39',
+            // 💡 숫자를 시간으로 잘못 해석하지 않도록 포맷터를 단순 텍스트(회차 표기용) 형태로 커스텀 처리합니다.
+            tickMarkFormatter: (time) => {
+                const d = new Date(time); // 이미 ms 단위이므로 * 1000 제거
+                return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+            },
+        },
+    };
+
+    const domElement = document.getElementById('chart');
+    const chart = LightweightCharts.createChart(domElement, chartProperties);
+    const seriesMap = new Map();
+
+    window.addEventListener('resize', () => {
+        chart.resize(domElement.clientWidth, 500);
+    });
+
+    // 3. 웹소켓 연결 수립
+    const socket = new WebSocket('ws://localhost:3000');
+
+    socket.onopen = () => {
+        statusEl.textContent = "연결됨";
+        statusEl.className = "status-badge status-connected";
+    };
+
+    speedRange.addEventListener('input', (e) => {
+        const ms = parseInt(e.target.value);
+        speedValue.textContent = `${ms} ms (${(ms/1000).toFixed(1)}초)`;
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ event: "set_interval", interval: ms }));
+        }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ event: "toggle_pause" }));
+        }
+    });
+
+    socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.event === "pause_status") {
+            if (data.isPaused) { pauseBtn.textContent = "▶️ 재개"; pauseBtn.classList.add('paused'); } 
+            else { pauseBtn.textContent = "⏸️ 일시정지"; pauseBtn.classList.remove('paused'); }
+            return;
+        }
+
+        if (data.event === "stock_update") {
+            const rowTime = data.time;
+            
+            if (timeHistory.length === 0 || timeHistory[timeHistory.length - 1] !== rowTime) {
+                timeHistory.push(rowTime);
+            }
+
+            data.stocks.forEach(stock => {
+                let series = seriesMap.get(stock.name);
+                if (!series) {
+                    const stockColor = stock.color || '#2962ff';
+                    series = chart.addSeries(LightweightCharts.AreaSeries, {
+                        lineColor: stockColor,
+                        topColor: stockColor + '40',
+                        bottomColor: stockColor + '00',
+                        lineWidth: 2,
+                        title: stock.name
+                    });
+                    seriesMap.set(stock.name, series);
+                }
+
+                series.update({
+                    time: rowTime, // undefined 가 아닌 명확한 정수 숫자가 매핑되어 에러가 해결됩니다.
+                    value: stock.currentPrice
+                });
+            });
+
+            updateChartVisibleRange();
+        }
+    };
+
+    function updateChartVisibleRange() {
+        if (timeHistory.length === 0) return;
+
+        const totalTicks = timeHistory.length;
+        const requiredTicks = currentRangeDays * TICKS_PER_DAY; 
+
+        const fromIndex = Math.max(0, totalTicks - requiredTicks);
+        
+        chart.timeScale().setVisibleRange({
+            from: timeHistory[fromIndex],
+            to: timeHistory[totalTicks - 1]
+        });
+    }
+
+    document.querySelectorAll('.range-btn').forEach(button => {
+        button.addEventListener('click', (e) => {
+            document.querySelectorAll('.range-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+
+            currentRangeDays = parseInt(e.target.getAttribute('data-days'));
+            updateChartVisibleRange();
+        });
+    });
+
+    socket.onclose = () => {
+        statusEl.textContent = "연결 끊김";
+        statusEl.className = "status-badge status-disconnected";
+    };
+</script>
+</body>
+</html>
