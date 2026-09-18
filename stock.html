@@ -20,9 +20,11 @@
         #clock-info { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #26a69a; }
 
         /* 제어판 스타일 */
-        .control-panel { background-color: #1e222d; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; border: 1px solid #2a2e39; }
+        .control-panel { background-color: #1e222d; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; flex-wrap: wrap; gap: 15px; border: 1px solid #2a2e39; }
         .control-panel label { font-weight: 600; color: #848e9c; }
         .control-panel input[type="range"] { flex: 1; max-width: 300px; }
+        .actual-interval { color: #26a69a; font-family: 'Courier New', Courier, monospace; white-space: nowrap; }
+        .byline { margin-left: auto; color: #848e9c; font-size: 12px; white-space: nowrap; }
         
         /* 차트 컨테이너 */
         .chart-container { background-color: #1e222d; padding: 10px; border-radius: 8px; border: 1px solid #2a2e39; position: relative; }
@@ -71,9 +73,11 @@
     <div class="control-panel">
         <label for="speedRange">🔄 전송 간격 설정:</label>
         <input type="range" id="speedRange" min="50" max="2500" step="25" value="500">
-        <span id="speedValue">1000 ms (1초)</span>
+        <span id="speedValue">500 ms (0.5초)</span>
+        <span id="actualIntervalValue" class="actual-interval">실제 주기: 대기 중</span>
         
         <button id="pauseBtn" class="btn-pause">⏸️ 일시정지</button>
+        <span class="byline">by Henry &amp; AI</span>
     </div>
 
     <div class="chart-container">
@@ -90,11 +94,13 @@
     const clockInfoEl = document.getElementById('clock-info');
     const speedRange = document.getElementById('speedRange');
     const speedValue = document.getElementById('speedValue');
+    const actualIntervalValue = document.getElementById('actualIntervalValue');
     const pauseBtn = document.getElementById('pauseBtn');
     const timestampLabel = document.getElementById('timestamp-label');
     const timestampValue = document.getElementById('timestamp-value');
 
     const timeHistory = [];
+    let previousTimestampMs = null;
 
     // 1. 상단 디지털시계 기능 (1초 주기 자동 갱신)
     function updateClock() {
@@ -142,9 +148,9 @@
         },
         timeScale: {
             borderColor: '#2a2e39',
-            // Lightweight Charts timestamp는 Unix 초 단위이므로 Date 변환 시 밀리초로 바꿉니다.
+            // 이 앱은 100ms 단위 tick을 표시하므로 차트 time은 밀리초를 유지합니다.
             tickMarkFormatter: (time) => {
-                const d = new Date(Number(time) * 1000);
+                const d = new Date(Number(time));
                 const timeText = d.toLocaleTimeString('ko-KR', {
                     hour12: false,
                     timeZone: 'Asia/Seoul'
@@ -200,7 +206,12 @@
                 timeHistory.push(rowTime);
             }
 
-            const timestampMs = data.timestampMs;
+            const timestampMs = data.timestampMs || rowTime;
+            if (previousTimestampMs !== null) {
+                const actualIntervalMs = timestampMs - previousTimestampMs;
+                actualIntervalValue.textContent = `실제 주기: ${actualIntervalMs} ms`;
+            }
+            previousTimestampMs = timestampMs;
             timestampLabel.textContent = `커스텀 timestamp: ${formatTimestamp(timestampMs)}`;
             timestampValue.textContent = `원본(ms): ${timestampMs}`;
 

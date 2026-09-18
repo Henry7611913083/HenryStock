@@ -153,12 +153,12 @@ wss.on('connection', (ws) => {
         marketEmaTrend = (currentMarketReturn * emaAlpha) + (marketEmaTrend * (1 - emaAlpha));
         const tickData = stocks.map(stock => stock.nextTick(marketEmaTrend));
 
-        // 💡 중요: UNIX 타임스탬프(초 단위)를 생성하여 보냅니다.
-        const timestamp = Date.now();
+        const timestampMs = Date.now();
 
         const payload = {
             event: "stock_update",
-            time: timestamp, // 회차 대신 실제 시간 전송
+            time: timestampMs,
+            timestampMs,
             stocks: tickData,
             marketTrend: Number((marketEmaTrend * 100).toFixed(3)),
             interval: currentInterval

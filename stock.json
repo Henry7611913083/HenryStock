@@ -28,7 +28,7 @@
       "upwardBias": 0.02
     },
     {
-      "name": "캣그라스 항공 (Catgrass Airlines)",
+      "name": "클로드 항공 (Claude Airlines)",
       "initialPrice": 2500,
       "driftDecay": 0.92,
       "baseVol": 0.04,
@@ -82,8 +82,5 @@
       "meanReversionStrength": 0.02,
       "randomWalkScale": 0.65,
       "upwardBias": 0.05
-    },
-    {
-      "_comment": "저거 예시임"
     }
 ]

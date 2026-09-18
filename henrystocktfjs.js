@@ -185,11 +185,10 @@ wss.on('connection', (ws) => {
         const tickData = stocks.map(stock => stock.nextTick(marketEmaTrend));
 
         const timestampMs = Date.now();
-        const timestamp = Math.floor(timestampMs / 1000);
 
         const payload = {
             event: "stock_update",
-            time: timestamp,
+            time: timestampMs,
             timestampMs,
             stocks: tickData,
             marketTrend: Number((marketEmaTrend * 100).toFixed(3)),
@@ -236,7 +235,7 @@ wss.on('connection', (ws) => {
 const PORT = 3000;
 
 async function startServer() {
-    await tf.setBackend('cpu');
+    await tf.setBackend('wasm');
     await tf.ready();
 
     server.listen(PORT, () => {
